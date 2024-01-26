@@ -464,10 +464,6 @@ static int tinf_inflate_block_data(TINF_DATA *d, TINF_TREE *lt, TINF_TREE *dt)
                 d->lzOff += d->dict_size;
             }
         } else {
-            /* catch trying to point before the start of dest buffer */
-            if (offs > d->dest - d->destStart) {
-                return TINF_DATA_ERROR;
-            }
             d->lzOff = -offs;
         }
     }
@@ -480,6 +476,7 @@ static int tinf_inflate_block_data(TINF_DATA *d, TINF_TREE *lt, TINF_TREE *dt)
         }
     } else {
         #if UZLIB_CONF_USE_MEMCPY
+
         /* copy as much as possible, in one memcpy() call */
         unsigned int to_copy = d->curlen, dest_len = d->dest_limit - d->dest;
         if (to_copy > dest_len) {
@@ -489,9 +486,27 @@ static int tinf_inflate_block_data(TINF_DATA *d, TINF_TREE *lt, TINF_TREE *dt)
         d->dest += to_copy;
         d->curlen -= to_copy;
         return TINF_OK;
+
         #else
-        d->dest[0] = d->dest[d->lzOff];
-        d->dest++;
+
+        if (d->dest_read_cb != NULL) {
+            /* copy as much as possible, in one dest_read_cb() call */
+            unsigned int to_copy = d->curlen, dest_len = d->dest_limit - d->dest;
+            if (to_copy > dest_len) {
+                to_copy = dest_len;
+            }
+            int res = d->dest_read_cb(d, d->dest + d->lzOff, to_copy);
+            if (res < 0) {
+                return res;
+            }
+            d->dest += to_copy;
+            d->curlen -= to_copy;
+            return TINF_OK;
+        } else {
+            d->dest[0] = d->dest[d->lzOff];
+            d->dest++;
+        }
+        
         #endif
     }
     d->curlen--;
@@ -559,6 +574,8 @@ void uzlib_uncompress_init(TINF_DATA *d, void *dict, unsigned int dictLen)
    d->dict_ring = dict;
    d->dict_idx = 0;
    d->curlen = 0;
+   d->source_read_cb = NULL;
+   d->dest_read_cb = NULL;
 }
 
 /* inflate next output bytes from compressed stream */

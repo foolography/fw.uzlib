@@ -101,6 +101,7 @@ struct uzlib_uncomp {
     unsigned char *dest;
     /* Pointer past the end of the dest buffer, similar to source_limit */
     unsigned char *dest_limit;
+    int (*dest_read_cb)(struct uzlib_uncomp *uncomp, unsigned char *addr, unsigned int len);
 
     /* Accumulating checksum */
     unsigned int checksum;
